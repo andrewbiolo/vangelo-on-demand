@@ -92,7 +92,10 @@ def webhook():
         print(json.dumps(payload, indent=2), flush=True)
 
         update = Update.de_json(payload, bot_app.bot)
-        asyncio.create_task(bot_app.process_update(update))  # Elaborazione attiva
+        asyncio.run_coroutine_threadsafe(
+            bot_app.process_update(update),
+            asyncio.get_event_loop()
+        )
 
         return "OK", 200
     except Exception as e:
