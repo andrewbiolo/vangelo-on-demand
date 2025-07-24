@@ -80,16 +80,23 @@ async def vangelo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 bot_app.add_handler(CommandHandler("vangelo", vangelo))
 
-# --- Webhook endpoint ---
+# --- Webhook endpoint con logging ---
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def webhook():
-    payload = request.get_json(force=True)
-    print("📩 Ricevuto webhook Telegram:")
-    print(payload)  # stampa tutto il JSON ricevuto
+    try:
+        print(f"🌐 POST ricevuto da {request.remote_addr} su {request.path}")
+        payload = request.get_json(force=True)
+        print("📩 Contenuto JSON ricevuto:")
+        print(payload)
 
-    update = Update.de_json(payload, bot_app.bot)
-    bot_app.update_queue.put(update)
-    return "OK", 200
+        update = Update.de_json(payload, bot_app.bot)
+        bot_app.update_queue.put(update)
+
+        return "OK", 200
+    except Exception as e:
+        print("❌ Errore nel webhook:")
+        print(e)
+        return "Errore interno", 500
 
 # --- Imposta webhook prima di avviare Flask ---
 async def startup():
@@ -97,6 +104,6 @@ async def startup():
     print(f"✅ Webhook impostato su {WEBHOOK_URL}")
 
 if __name__ == "__main__":
-    print("✅ Avvio setup webhook e Flask...")
+    print("🚀 Avvio setup webhook e Flask...")
     asyncio.run(startup())  # imposta il webhook
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
