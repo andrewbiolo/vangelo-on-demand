@@ -1,0 +1,4 @@
+flask
+python-telegram-bot[webhooks]>=20.0
+feedparser
+beautifulsoup4
