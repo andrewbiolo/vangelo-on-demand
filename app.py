@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 import asyncio
 import feedparser
 from flask import Flask, request
@@ -80,30 +81,32 @@ async def vangelo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 bot_app.add_handler(CommandHandler("vangelo", vangelo))
 
-# --- Webhook endpoint con logging ---
+# --- Webhook endpoint con log + flush ---
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def webhook():
-    try:
-        print(f"🌐 POST ricevuto da {request.remote_addr} su {request.path}")
-        payload = request.get_json(force=True)
-        print("📩 Contenuto JSON ricevuto:")
-        print(payload)
+    print("📍 ENTRATO IN /bot/ webhook", flush=True)
 
-        update = Update.de_json(payload, bot_app.bot)
-        bot_app.update_queue.put(update)
+    try:
+        payload = request.get_json(force=True)
+        print("📩 Contenuto JSON ricevuto:", flush=True)
+        print(payload, flush=True)
+
+        # update = Update.de_json(payload, bot_app.bot)
+        # bot_app.update_queue.put(update)
 
         return "OK", 200
+
     except Exception as e:
-        print("❌ Errore nel webhook:")
-        print(e)
+        print("❌ Errore nel webhook:", file=sys.stderr, flush=True)
+        print(e, file=sys.stderr, flush=True)
         return "Errore interno", 500
 
 # --- Imposta webhook prima di avviare Flask ---
 async def startup():
     await bot_app.bot.set_webhook(url=WEBHOOK_URL)
-    print(f"✅ Webhook impostato su {WEBHOOK_URL}")
+    print(f"✅ Webhook impostato su {WEBHOOK_URL}", flush=True)
 
 if __name__ == "__main__":
-    print("🚀 Avvio setup webhook e Flask...")
-    asyncio.run(startup())  # imposta il webhook
+    print("🚀 Avvio setup webhook e Flask...", flush=True)
+    asyncio.run(startup())
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
