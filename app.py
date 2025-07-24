@@ -1,6 +1,7 @@
 import os
 import re
 import sys
+import json
 import asyncio
 import feedparser
 from flask import Flask, request
@@ -25,7 +26,7 @@ ITALIAN_MONTHS = {
 app = Flask(__name__)
 bot_app = Application.builder().token(TOKEN).build()
 
-# --- Parsing ---
+# --- Parsing Vangelo ---
 def formatta_html(text):
     text = re.sub(r'“([^”]+)”', r'<b>“\1”</b>', text)
     text = re.sub(r'"([^"]+)"', r'<b>"\1"</b>', text)
@@ -81,32 +82,32 @@ async def vangelo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 bot_app.add_handler(CommandHandler("vangelo", vangelo))
 
-# --- Webhook endpoint con log + flush ---
+# --- Webhook endpoint ---
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def webhook():
     print("📍 ENTRATO IN /bot/ webhook", flush=True)
-
     try:
         payload = request.get_json(force=True)
-        print("📩 Contenuto JSON ricevuto:", flush=True)
-        print(payload, flush=True)
+        print("📩 JSON ricevuto:", flush=True)
+        print(json.dumps(payload, indent=2), flush=True)
 
-        # update = Update.de_json(payload, bot_app.bot)
-        # bot_app.update_queue.put(update)
-
+        update = Update.de_json(payload, bot_app.bot)
+        bot_app.update_queue.put(update)
         return "OK", 200
-
     except Exception as e:
-        print("❌ Errore nel webhook:", file=sys.stderr, flush=True)
-        print(e, file=sys.stderr, flush=True)
+        print("❌ Errore nel webhook:", e, file=sys.stderr, flush=True)
         return "Errore interno", 500
 
-# --- Imposta webhook prima di avviare Flask ---
-async def startup():
+# --- Avvio del bot + Flask ---
+async def main():
+    print("🚀 Setup webhook...", flush=True)
     await bot_app.bot.set_webhook(url=WEBHOOK_URL)
-    print(f"✅ Webhook impostato su {WEBHOOK_URL}", flush=True)
+    await bot_app.initialize()
+    await bot_app.start()
+    await bot_app.updater.start_polling()  # necessario per processare update_queue
+    print("✅ Bot avviato e webhook attivo!", flush=True)
 
 if __name__ == "__main__":
-    print("🚀 Avvio setup webhook e Flask...", flush=True)
-    asyncio.run(startup())
+    loop = asyncio.get_event_loop()
+    loop.create_task(main())  # Avvia telegram bot
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
