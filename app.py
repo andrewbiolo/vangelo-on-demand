@@ -87,17 +87,12 @@ def webhook():
     bot_app.update_queue.put(update)
     return "OK", 200
 
-# --- Webhook setup all'avvio ---
+# --- Imposta webhook prima di avviare Flask ---
 async def startup():
     await bot_app.bot.set_webhook(url=WEBHOOK_URL)
     print(f"✅ Webhook impostato su {WEBHOOK_URL}")
 
-@app.before_request
-def before_request():
-    if not bot_app.running:
-        asyncio.create_task(startup())
-
-# --- Avvio Flask ---
 if __name__ == "__main__":
-    print("✅ Avvio Flask app")
+    print("✅ Avvio setup webhook e Flask...")
+    asyncio.run(startup())  # imposta il webhook
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
