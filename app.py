@@ -3,6 +3,7 @@ import re
 import sys
 import json
 import asyncio
+import threading
 import feedparser
 from flask import Flask, request
 from telegram import Update
@@ -10,11 +11,11 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 from datetime import datetime
 from bs4 import BeautifulSoup
 
-# --- Event loop globale ---
+# --- 1. Loop globale (funziona anche su Render / multithread) ---
 main_loop = asyncio.new_event_loop()
 asyncio.set_event_loop(main_loop)
 
-# --- Config ---
+# --- 2. Configurazioni ---
 TOKEN = os.getenv("TOKEN")
 WEBHOOK_PATH = f"/bot/{TOKEN}"
 RENDER_HOST = os.getenv("RENDER_EXTERNAL_HOSTNAME", "localhost")
@@ -26,11 +27,11 @@ ITALIAN_MONTHS = {
     9: "settembre", 10: "ottobre", 11: "novembre", 12: "dicembre"
 }
 
-# --- Flask e bot setup ---
+# --- 3. Flask app + bot ---
 app = Flask(__name__)
 bot_app = Application.builder().token(TOKEN).build()
 
-# --- Parsing Vangelo ---
+# --- 4. Funzione parsing del feed RSS ---
 def formatta_html(text):
     text = re.sub(r'“([^”]+)”', r'<b>“\1”</b>', text)
     text = re.sub(r'"([^"]+)"', r'<b>"\1"</b>', text)
@@ -71,52 +72,53 @@ def estrai_vangelo(data: datetime.date):
 
     return data_str, formatta_html(vangelo), formatta_html(commento), entry.link
 
-# --- Bot handler ---
+# --- 5. Handler per il comando /vangelo ---
 async def vangelo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("📥 Comando /vangelo ricevuto", flush=True)
-    data = datetime.utcnow().date()
-    data_str, vangelo, commento, link = estrai_vangelo(data)
 
-    if not vangelo:
+    data = datetime.utcnow().date()
+    data_str, vangelo_text, commento_text, link = estrai_vangelo(data)
+
+    if not vangelo_text:
         await update.message.reply_text("⚠️ Vangelo non trovato per oggi.")
         return
 
-    await update.message.reply_html(f"📖 <b>Vangelo del giorno ({data_str})</b>\n\n🕊️ {vangelo}")
-    await update.message.reply_html(f"📝 <b>Commento al Vangelo</b>\n\n{commento}")
+    await update.message.reply_html(f"📖 <b>Vangelo del giorno ({data_str})</b>\n\n🕊️ {vangelo_text}")
+    await update.message.reply_html(f"📝 <b>Commento al Vangelo</b>\n\n{commento_text}")
     await update.message.reply_html(f"🔗 <a href=\"{link}\">Leggi sul sito Vatican News</a>\n\n🌱 Buona giornata!")
 
 bot_app.add_handler(CommandHandler("vangelo", vangelo))
 
-# --- Webhook endpoint ---
+# --- 6. Endpoint Webhook ---
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def webhook():
     print("📍 ENTRATO IN /bot/ webhook", flush=True)
     try:
         payload = request.get_json(force=True)
-        print("📩 JSON ricevuto:", flush=True)
-        print(json.dumps(payload, indent=2), flush=True)
+        print("📩 JSON ricevuto:\n" + json.dumps(payload, indent=2), flush=True)
 
         update = Update.de_json(payload, bot_app.bot)
-
-        # FIX: usa event loop globale creato nel main thread
-        asyncio.run_coroutine_threadsafe(
-            bot_app.process_update(update),
-            main_loop
-        )
+        asyncio.run_coroutine_threadsafe(bot_app.process_update(update), main_loop)
 
         return "OK", 200
     except Exception as e:
         print("❌ Errore nel webhook:", e, file=sys.stderr, flush=True)
         return "Errore interno", 500
 
-# --- Avvio del bot + Flask ---
+# --- 7. Avvio ---
 async def main():
-    print("🚀 Setup webhook...", flush=True)
+    print(f"🚀 Imposto webhook: {WEBHOOK_URL}", flush=True)
     await bot_app.bot.set_webhook(url=WEBHOOK_URL)
     await bot_app.initialize()
     await bot_app.start()
-    print("✅ Bot avviato e webhook attivo!", flush=True)
+    print("✅ Bot avviato e pronto!", flush=True)
 
 if __name__ == "__main__":
-    main_loop.create_task(main())
+    def start_loop():
+        asyncio.set_event_loop(main_loop)
+        main_loop.run_until_complete(main())
+        main_loop.run_forever()
+
+    threading.Thread(target=start_loop).start()
+
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
