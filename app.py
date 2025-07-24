@@ -1,16 +1,17 @@
 import os
+import re
+import feedparser
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 from datetime import datetime
-import feedparser
 from bs4 import BeautifulSoup
-import re
 
-# --- Costanti ---
+# --- Config ---
 TOKEN = os.getenv("TOKEN")
 WEBHOOK_PATH = f"/bot/{TOKEN}"
-WEBHOOK_URL = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}{WEBHOOK_PATH}"
+RENDER_HOST = os.getenv("RENDER_EXTERNAL_HOSTNAME", "localhost")
+WEBHOOK_URL = f"https://{RENDER_HOST}{WEBHOOK_PATH}"
 
 ITALIAN_MONTHS = {
     1: "gennaio", 2: "febbraio", 3: "marzo", 4: "aprile",
@@ -18,11 +19,12 @@ ITALIAN_MONTHS = {
     9: "settembre", 10: "ottobre", 11: "novembre", 12: "dicembre"
 }
 
-# --- Bot app ---
+# --- Flask e bot setup ---
 app = Flask(__name__)
 bot_app = Application.builder().token(TOKEN).build()
 
-# --- Vangelo parsing ---
+
+# --- Funzioni di parsing ---
 def formatta_html(text):
     text = re.sub(r'“([^”]+)”', r'<b>“\1”</b>', text)
     text = re.sub(r'"([^"]+)"', r'<b>"\1"</b>', text)
@@ -31,6 +33,7 @@ def formatta_html(text):
     text = text.replace("<br>", "").replace("<br/>", "").replace("<br />", "")
     text = re.sub(r'\n+', '\n\n', text.strip())
     return text
+
 
 def estrai_vangelo(data: datetime.date):
     feed = feedparser.parse("https://www.vaticannews.va/it/vangelo-del-giorno-e-parola-del-giorno.rss.xml")
@@ -63,7 +66,8 @@ def estrai_vangelo(data: datetime.date):
 
     return data_str, formatta_html(vangelo), formatta_html(commento), entry.link
 
-# --- Command handler ---
+
+# --- Handler ---
 async def vangelo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = datetime.utcnow().date()
     data_str, vangelo, commento, link = estrai_vangelo(data)
@@ -76,7 +80,9 @@ async def vangelo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_html(f"📝 <b>Commento al Vangelo</b>\n\n{commento}")
     await update.message.reply_html(f"🔗 <a href=\"{link}\">Leggi sul sito Vatican News</a>\n\n🌱 Buona giornata!")
 
+
 bot_app.add_handler(CommandHandler("vangelo", vangelo))
+
 
 # --- Webhook route ---
 @app.route(WEBHOOK_PATH, methods=["POST"])
@@ -85,10 +91,20 @@ def webhook():
     bot_app.update_queue.put(update)
     return "OK", 200
 
-@app.before_first_request
-def set_webhook():
-    bot_app.bot.set_webhook(url=WEBHOOK_URL)
 
-# --- Start Flask app ---
+# --- Start hook compatibile con Render ---
+async def startup():
+    await bot_app.bot.set_webhook(url=WEBHOOK_URL)
+    print(f"✅ Webhook impostato su {WEBHOOK_URL}")
+
+
+@app.before_request
+def before_request():
+    if not bot_app.running:
+        bot_app.run_task(startup())
+
+
+# --- Avvio Flask ---
 if __name__ == "__main__":
+    print("✅ Avvio app Flask con webhook Telegram")
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
