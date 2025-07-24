@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TOKEN: ${{ secrets.TOKEN }}
-      CHAT_ID: ${{ secrets.CHAT_ID }}
+      CHAT_ID: ${{ secrets.GROUP_CHAT_ID }}
     steps:
       - uses: actions/checkout@v3
 
