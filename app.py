@@ -92,7 +92,8 @@ def webhook():
         print(json.dumps(payload, indent=2), flush=True)
 
         update = Update.de_json(payload, bot_app.bot)
-        bot_app.update_queue.put(update)
+        asyncio.create_task(bot_app.process_update(update))  # Elaborazione attiva
+
         return "OK", 200
     except Exception as e:
         print("❌ Errore nel webhook:", e, file=sys.stderr, flush=True)
@@ -104,10 +105,9 @@ async def main():
     await bot_app.bot.set_webhook(url=WEBHOOK_URL)
     await bot_app.initialize()
     await bot_app.start()
-    await bot_app.updater.start_polling()  # necessario per processare update_queue
     print("✅ Bot avviato e webhook attivo!", flush=True)
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
-    loop.create_task(main())  # Avvia telegram bot
+    loop.create_task(main())
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
