@@ -1,13 +1,11 @@
 
 import os
 import re
-import argparse
 import asyncio
 import feedparser
+from telegram import Bot
 from datetime import datetime
 from bs4 import BeautifulSoup
-from telegram.ext import Application
-from telegram.constants import ParseMode
 
 ITALIAN_MONTHS = {
     1: "gennaio", 2: "febbraio", 3: "marzo", 4: "aprile",
@@ -16,7 +14,6 @@ ITALIAN_MONTHS = {
 }
 
 def formatta_html(text):
-    import re
     text = re.sub(r'“([^”]+)”', r'<b>“\1”</b>', text)
     text = re.sub(r'"([^"]+)"', r'<b>"\1"</b>', text)
     text = re.sub(r'«([^»]+)»', r'<i>«\1»</i>', text)
@@ -34,7 +31,7 @@ def estrai_vangelo(data: datetime.date):
 
     entry = next((e for e in feed.entries if data_str in e.title.lower()), None)
     if not entry:
-        return data_str, None, None, None
+        return None, None, None, None
 
     soup = BeautifulSoup(entry.description, "html.parser")
     ps = soup.find_all("p", style="text-align: justify;")
@@ -56,27 +53,20 @@ def estrai_vangelo(data: datetime.date):
 
     return data_str, formatta_html(vangelo), formatta_html(commento), entry.link
 
-async def invia_vangelo_oggi(chat_id: str, token: str):
-    application = Application.builder().token(token).build()
+async def invia_vangelo_oggi(chat_id: str, token: str, date_str: str = None):
+    if date_str:
+        try:
+            data = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            raise ValueError("Formato data non valido. Usa YYYY-MM-DD.")
+    else:
+        data = datetime.utcnow().date()
 
-    data = datetime.utcnow().date()
-    data_str, vangelo, commento, link = estrai_vangelo(data)
+    data_str, vangelo_text, commento_text, link = estrai_vangelo(data)
+    if not vangelo_text:
+        raise ValueError("Nessun Vangelo trovato per questa data.")
 
-    if not vangelo:
-        print(f"⚠️ Nessun vangelo trovato per {data_str}")
-        return
-
-    await application.bot.send_message(chat_id=chat_id, text=f"📖 <b>Vangelo del giorno ({data_str})</b>\n\n🕊️ {vangelo}", parse_mode=ParseMode.HTML)
-    await application.bot.send_message(chat_id=chat_id, text=f"📝 <b>Commento al Vangelo</b>\n\n{commento}", parse_mode=ParseMode.HTML)
-    await application.bot.send_message(chat_id=chat_id, text=f"🔗 <a href='{link}'>Leggi sul sito Vatican News</a>\n\n🌱 Buona giornata!", parse_mode=ParseMode.HTML, disable_web_page_preview=True)
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Invia il Vangelo del giorno a una chat Telegram.")
-    parser.add_argument("--chat_id", type=str, help="ID della chat Telegram", required=True)
-    args = parser.parse_args()
-
-    TOKEN = os.getenv("TOKEN")
-    if not TOKEN:
-        raise EnvironmentError("Variabile d'ambiente TOKEN non definita")
-
-    asyncio.run(invia_vangelo_oggi(args.chat_id, TOKEN))
+    bot = Bot(token=token)
+    await bot.send_message(chat_id=chat_id, text=f"📖 <b>Vangelo del giorno ({data_str})</b>\n\n🕊️ {vangelo_text}", parse_mode='HTML')
+    await bot.send_message(chat_id=chat_id, text=f"📝 <b>Commento al Vangelo</b>\n\n{commento_text}", parse_mode='HTML')
+    await bot.send_message(chat_id=chat_id, text=f"🔗 <a href='{link}'>Leggi sul sito Vatican News</a>\n\n🌱 Buona giornata!", parse_mode='HTML', disable_web_page_preview=True)

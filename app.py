@@ -24,14 +24,21 @@ WEBHOOK_URL = f"https://{RENDER_HOST}{WEBHOOK_PATH}"
 app = Flask(__name__)
 bot_app = Application.builder().token(TOKEN).build()
 
-# --- 4. Handler per il comando /vangelo ---
+# --- 4. Handler per il comando /vangelo [YYYY-MM-DD] ---
 async def vangelo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("📥 Comando /vangelo ricevuto", flush=True)
     chat_id = str(update.effective_chat.id)
 
+    date_str = None
+    if context.args:
+        date_str = context.args[0]
+        print(f"📅 Parametro data richiesto: {date_str}", flush=True)
+
     try:
-        await update.message.reply_text("📨 Recupero il Vangelo del giorno...")
-        await invia_vangelo_oggi(chat_id, TOKEN)
+        await update.message.reply_text("📨 Recupero il Vangelo richiesto...")
+        await invia_vangelo_oggi(chat_id, TOKEN, date_str)
+    except ValueError as ve:
+        await update.message.reply_text(f"⚠️ Errore: {ve}")
     except Exception as e:
         print(f"❌ Errore in /vangelo: {e}", file=sys.stderr, flush=True)
         await update.message.reply_text("⚠️ Errore durante l'invio del Vangelo.")
