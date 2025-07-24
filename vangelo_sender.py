@@ -56,9 +56,13 @@ def estrai_vangelo(data: datetime.date):
 async def invia_vangelo_oggi(chat_id: str, token: str, date_str: str = None):
     if date_str:
         try:
-            data = datetime.strptime(date_str, "%Y-%m-%d").date()
+            # Prova formato italiano DD-MM-YYYY prima, poi YYYY-MM-DD
+            if "-" in date_str and len(date_str.split("-")[0]) == 2:
+                data = datetime.strptime(date_str, "%d-%m-%Y").date()
+            else:
+                data = datetime.strptime(date_str, "%Y-%m-%d").date()
         except ValueError:
-            raise ValueError("Formato data non valido. Usa YYYY-MM-DD.")
+            raise ValueError("Data non valida. Usa il formato DD-MM-YYYY o YYYY-MM-DD (es: 24-07-2024)")
     else:
         data = datetime.utcnow().date()
 
