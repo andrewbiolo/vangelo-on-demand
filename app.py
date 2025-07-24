@@ -83,7 +83,11 @@ bot_app.add_handler(CommandHandler("vangelo", vangelo))
 # --- Webhook endpoint ---
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), bot_app.bot)
+    payload = request.get_json(force=True)
+    print("📩 Ricevuto webhook Telegram:")
+    print(payload)  # stampa tutto il JSON ricevuto
+
+    update = Update.de_json(payload, bot_app.bot)
     bot_app.update_queue.put(update)
     return "OK", 200
 
