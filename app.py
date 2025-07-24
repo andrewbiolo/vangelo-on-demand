@@ -1,5 +1,6 @@
 import os
 import re
+import asyncio
 import feedparser
 from flask import Flask, request
 from telegram import Update
@@ -23,8 +24,7 @@ ITALIAN_MONTHS = {
 app = Flask(__name__)
 bot_app = Application.builder().token(TOKEN).build()
 
-
-# --- Funzioni di parsing ---
+# --- Parsing ---
 def formatta_html(text):
     text = re.sub(r'“([^”]+)”', r'<b>“\1”</b>', text)
     text = re.sub(r'"([^"]+)"', r'<b>"\1"</b>', text)
@@ -33,7 +33,6 @@ def formatta_html(text):
     text = text.replace("<br>", "").replace("<br/>", "").replace("<br />", "")
     text = re.sub(r'\n+', '\n\n', text.strip())
     return text
-
 
 def estrai_vangelo(data: datetime.date):
     feed = feedparser.parse("https://www.vaticannews.va/it/vangelo-del-giorno-e-parola-del-giorno.rss.xml")
@@ -66,8 +65,7 @@ def estrai_vangelo(data: datetime.date):
 
     return data_str, formatta_html(vangelo), formatta_html(commento), entry.link
 
-
-# --- Handler ---
+# --- Bot handler ---
 async def vangelo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = datetime.utcnow().date()
     data_str, vangelo, commento, link = estrai_vangelo(data)
@@ -80,31 +78,26 @@ async def vangelo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_html(f"📝 <b>Commento al Vangelo</b>\n\n{commento}")
     await update.message.reply_html(f"🔗 <a href=\"{link}\">Leggi sul sito Vatican News</a>\n\n🌱 Buona giornata!")
 
-
 bot_app.add_handler(CommandHandler("vangelo", vangelo))
 
-
-# --- Webhook route ---
+# --- Webhook endpoint ---
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), bot_app.bot)
     bot_app.update_queue.put(update)
     return "OK", 200
 
-
-# --- Start hook compatibile con Render ---
+# --- Webhook setup all'avvio ---
 async def startup():
     await bot_app.bot.set_webhook(url=WEBHOOK_URL)
     print(f"✅ Webhook impostato su {WEBHOOK_URL}")
 
-
 @app.before_request
 def before_request():
     if not bot_app.running:
-        bot_app.run_task(startup())
-
+        asyncio.create_task(startup())
 
 # --- Avvio Flask ---
 if __name__ == "__main__":
-    print("✅ Avvio app Flask con webhook Telegram")
+    print("✅ Avvio Flask app")
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
