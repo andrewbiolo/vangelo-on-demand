@@ -10,6 +10,10 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 from datetime import datetime
 from bs4 import BeautifulSoup
 
+# --- Event loop globale ---
+main_loop = asyncio.new_event_loop()
+asyncio.set_event_loop(main_loop)
+
 # --- Config ---
 TOKEN = os.getenv("TOKEN")
 WEBHOOK_PATH = f"/bot/{TOKEN}"
@@ -69,6 +73,7 @@ def estrai_vangelo(data: datetime.date):
 
 # --- Bot handler ---
 async def vangelo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print("📥 Comando /vangelo ricevuto", flush=True)
     data = datetime.utcnow().date()
     data_str, vangelo, commento, link = estrai_vangelo(data)
 
@@ -92,9 +97,11 @@ def webhook():
         print(json.dumps(payload, indent=2), flush=True)
 
         update = Update.de_json(payload, bot_app.bot)
+
+        # FIX: usa event loop globale creato nel main thread
         asyncio.run_coroutine_threadsafe(
             bot_app.process_update(update),
-            asyncio.get_event_loop()
+            main_loop
         )
 
         return "OK", 200
@@ -111,6 +118,5 @@ async def main():
     print("✅ Bot avviato e webhook attivo!", flush=True)
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.create_task(main())
+    main_loop.create_task(main())
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
