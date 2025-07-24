@@ -7,4 +7,3 @@ services:
     startCommand: "python app.py"
     envVars:
       - key: TOKEN
-        value: "INSERISCI_IL_TUO_TOKEN_TELEGRAM"
