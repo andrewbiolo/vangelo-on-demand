@@ -33,13 +33,13 @@ WEBHOOK_URL = f"https://{RENDER_HOST}{WEBHOOK_PATH}"
 app = Flask(__name__)
 bot_app = Application.builder().token(TOKEN).build()
 
-# --- 4. Helper per bottoni ---
+# --- 4. Bottoni inline ---
 def get_vangelo_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📖 Vangelo del giorno", callback_data="vangelo_oggi")]
     ])
 
-# --- 5. Funzione per inviare bottone manualmente (entry point) ---
+# --- 5. Funzione per inviare bottone iniziale ---
 async def handle_vangelo_entry(chat_id):
     await bot_app.bot.send_message(
         chat_id,
@@ -47,10 +47,11 @@ async def handle_vangelo_entry(chat_id):
         reply_markup=get_vangelo_keyboard()
     )
 
-# --- 6. Comando /vangelo (con argomento data opzionale) ---
+# --- 6. Comando /vangelo [opzionale: data] ---
 async def vangelo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("📥 Comando /vangelo ricevuto", flush=True)
     chat_id = str(update.effective_chat.id)
+
     date_str = None
     if context.args:
         date_str = context.args[0]
@@ -59,17 +60,26 @@ async def vangelo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await update.message.reply_text("📨 Recupero il Vangelo richiesto...")
         await invia_vangelo_oggi(chat_id, TOKEN, date_str)
+
+        # ✅ Mostra bottone alla fine anche dopo /vangelo
+        await bot_app.bot.send_message(
+            chat_id,
+            "Puoi richiedere di nuovo il Vangelo qui sotto 👇",
+            reply_markup=get_vangelo_keyboard()
+        )
+
     except ValueError as ve:
         await update.message.reply_text(f"⚠️ Errore: {ve}")
     except Exception as e:
         print(f"❌ Errore in /vangelo: {e}", file=sys.stderr, flush=True)
         await update.message.reply_text("⚠️ Errore durante l'invio del Vangelo.")
 
-# --- 7. Comando /start ---
+# --- 7. Comando /start (anche con link ?start=vangelo) ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"▶️ Comando /start ricevuto. Argomenti: {context.args}", flush=True)
     chat_id = update.effective_chat.id
-    if context.args and context.args[0] == "vangelo":
+
+    if context.args and context.args[0].startswith("vangelo"):
         await handle_vangelo_entry(chat_id)
     else:
         await update.message.reply_text(
@@ -77,7 +87,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=get_vangelo_keyboard()
         )
 
-# --- 8. Callback inline button ---
+# --- 8. Callback da bottone inline ---
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -88,7 +98,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("📨 Recupero il Vangelo richiesto...")
             await invia_vangelo_oggi(chat_id, TOKEN, None)
 
-            # Ripropone bottone in fondo alla chat
+            # ✅ Ripropone il bottone in fondo anche dopo click
             await bot_app.bot.send_message(
                 chat_id,
                 "Puoi richiedere di nuovo il Vangelo qui sotto 👇",
@@ -120,17 +130,17 @@ def webhook():
         print("❌ Errore nel webhook:", e, file=sys.stderr, flush=True)
         return "Errore interno", 500
 
-# --- 11. Avvio + comando menu + username del bot ---
+# --- 11. Avvio del bot ---
 async def main():
     print(f"🚀 Imposto webhook: {WEBHOOK_URL}", flush=True)
     await bot_app.bot.set_webhook(url=WEBHOOK_URL)
 
-    # ✅ Imposto i comandi del bot
+    # ✅ Comando registrato nel menù
     await bot_app.bot.set_my_commands([
         BotCommand("vangelo", "Vangelo del giorno")
     ])
 
-    # ✅ Recupero username del bot (lo puoi loggare o salvare)
+    # ✅ Recupero username del bot
     me = await bot_app.bot.get_me()
     print(f"🤖 Username del bot: @{me.username}", flush=True)
 
@@ -138,7 +148,7 @@ async def main():
     await bot_app.start()
     print("✅ Bot avviato e pronto!", flush=True)
 
-# --- 12. Bootstrap thread + avvio Flask ---
+# --- 12. Thread e avvio Flask ---
 if __name__ == "__main__":
     def start_loop():
         asyncio.set_event_loop(main_loop)
