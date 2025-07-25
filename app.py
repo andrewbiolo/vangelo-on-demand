@@ -3,6 +3,8 @@ import sys
 import json
 import asyncio
 import threading
+import time
+import requests
 from flask import Flask, request
 from telegram import (
     Update,
@@ -16,7 +18,7 @@ from telegram.ext import (
     CallbackQueryHandler,
     ContextTypes
 )
-from datetime import datetime
+from telegram.error import BadRequest
 from vangelo_sender import invia_vangelo_oggi
 
 # --- 1. Loop globale ---
@@ -47,7 +49,7 @@ async def handle_vangelo_entry(chat_id):
         reply_markup=get_vangelo_keyboard()
     )
 
-# --- 6. Comando /vangelo [opzionale: data] ---
+# --- 6. Comando /vangelo ---
 async def vangelo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("📥 Comando /vangelo ricevuto", flush=True)
     chat_id = str(update.effective_chat.id)
@@ -73,7 +75,7 @@ async def vangelo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f"❌ Errore in /vangelo: {e}", file=sys.stderr, flush=True)
         await update.message.reply_text("⚠️ Errore durante l'invio del Vangelo.")
 
-# --- 7. Comando /start (anche con link ?start=vangelo) ---
+# --- 7. Comando /start ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"▶️ Comando /start ricevuto. Argomenti: {context.args}", flush=True)
     chat_id = update.effective_chat.id
@@ -89,8 +91,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- 8. Callback da bottone inline ---
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
     chat_id = str(query.message.chat.id)
+
+    try:
+        await query.answer()
+    except BadRequest as e:
+        print(f"⚠️ CallbackQuery scaduta: {e}", flush=True)
+        await bot_app.bot.send_message(
+            chat_id,
+            "⚠️ Il bot si stava riattivando. Per favore clicca di nuovo tra pochi secondi 🙏"
+        )
+        return
 
     if query.data == "vangelo_oggi":
         try:
@@ -112,7 +123,7 @@ bot_app.add_handler(CommandHandler("vangelo", vangelo))
 bot_app.add_handler(CommandHandler("start", start))
 bot_app.add_handler(CallbackQueryHandler(handle_callback))
 
-# --- 10. Webhook endpoint ---
+# --- 10. Webhook Telegram ---
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def webhook():
     print("📍 ENTRATO IN /bot/ webhook", flush=True)
@@ -128,13 +139,13 @@ def webhook():
         print("❌ Errore nel webhook:", e, file=sys.stderr, flush=True)
         return "Errore interno", 500
 
-# --- ✅ 11. Endpoint /ping per tenere viva l'app ---
+# --- 11. Endpoint /ping per tenere viva l'app ---
 @app.route("/ping")
 def ping():
     print("🔄 PING ricevuto", flush=True)
     return "✅ Bot attivo", 200
 
-# --- ✅ 12. Endpoint /reset_webhook (non chiude il loop!) ---
+# --- 12. Endpoint /reset_webhook classico ---
 @app.route("/reset_webhook")
 def reset_webhook():
     print("🔁 Resetting webhook...", flush=True)
@@ -150,7 +161,39 @@ def reset_webhook():
         print("❌ Errore nel reset webhook:", e, file=sys.stderr, flush=True)
         return "Errore nel reset webhook", 500
 
-# --- 13. Avvio del bot ---
+# --- ✅ 13. Nuovo endpoint /wake_and_reset ---
+@app.route("/wake_and_reset")
+def wake_and_reset():
+    print("👋 Wake & Reset INITIATED", flush=True)
+
+    try:
+        # 👉 1. Ping del servizio
+        ping_url = f"https://{RENDER_HOST}/ping"
+        print(f"📡 Pinging self: {ping_url}", flush=True)
+        try:
+            requests.get(ping_url, timeout=5)
+        except Exception as ping_error:
+            print(f"⚠️ Errore nel ping: {ping_error}", flush=True)
+
+        # 👉 2. Attesa per avvio completo
+        print("⏳ Attesa 120s per risveglio completo...", flush=True)
+        time.sleep(120)
+
+        # 👉 3. Reset Webhook
+        future = asyncio.run_coroutine_threadsafe(
+            bot_app.bot.set_webhook(url=WEBHOOK_URL),
+            main_loop
+        )
+        future.result(timeout=10)
+
+        print("✅ Wake & Webhook reset completati", flush=True)
+        return "Wake & Reset COMPLETATO", 200
+
+    except Exception as e:
+        print(f"❌ Errore in wake_and_reset: {e}", file=sys.stderr, flush=True)
+        return "Errore in wake_and_reset", 500
+
+# --- 14. Avvio bot + Flask ---
 async def main():
     print(f"🚀 Imposto webhook: {WEBHOOK_URL}", flush=True)
     await bot_app.bot.set_webhook(url=WEBHOOK_URL)
@@ -166,7 +209,6 @@ async def main():
     await bot_app.start()
     print("✅ Bot avviato e pronto!", flush=True)
 
-# --- 14. Thread e avvio Flask ---
 if __name__ == "__main__":
     def start_loop():
         asyncio.set_event_loop(main_loop)
