@@ -139,13 +139,13 @@ def webhook():
         print("❌ Errore nel webhook:", e, file=sys.stderr, flush=True)
         return "Errore interno", 500
 
-# --- 11. Endpoint /ping per tenere viva l'app ---
+# --- 11. Ping semplice ---
 @app.route("/ping")
 def ping():
     print("🔄 PING ricevuto", flush=True)
     return "✅ Bot attivo", 200
 
-# --- 12. Endpoint /reset_webhook classico ---
+# --- 12. Reset Webhook semplice ---
 @app.route("/reset_webhook")
 def reset_webhook():
     print("🔁 Resetting webhook...", flush=True)
@@ -161,33 +161,49 @@ def reset_webhook():
         print("❌ Errore nel reset webhook:", e, file=sys.stderr, flush=True)
         return "Errore nel reset webhook", 500
 
-# --- ✅ 13. Nuovo endpoint /wake_and_reset ---
+# --- ✅ 13. Wake & Reset REATTIVO ---
 @app.route("/wake_and_reset")
 def wake_and_reset():
     print("👋 Wake & Reset INITIATED", flush=True)
 
     try:
-        # 👉 1. Ping del servizio
         ping_url = f"https://{RENDER_HOST}/ping"
-        print(f"📡 Pinging self: {ping_url}", flush=True)
+        max_wait_time = 60   # secondi massimi di attesa
+        check_interval = 5   # ogni quanti secondi riprovare
+        elapsed = 0
+
+        print(f"📡 Pinging {ping_url} per risvegliare il bot...", flush=True)
         try:
             requests.get(ping_url, timeout=5)
-        except Exception as ping_error:
-            print(f"⚠️ Errore nel ping: {ping_error}", flush=True)
+        except Exception as e:
+            print(f"⚠️ Primo ping fallito (normale se bot è in sleep): {e}", flush=True)
 
-        # 👉 2. Attesa per avvio completo
-        print("⏳ Attesa 120s per risveglio completo...", flush=True)
-        time.sleep(120)
+        # 🔁 Attendi fino a quando risponde o timeout
+        while elapsed < max_wait_time:
+            try:
+                response = requests.get(ping_url, timeout=5)
+                if response.status_code == 200:
+                    print("✅ Bot online, procedo con reset webhook", flush=True)
+                    break
+            except Exception:
+                pass
 
-        # 👉 3. Reset Webhook
+            time.sleep(check_interval)
+            elapsed += check_interval
+            print(f"⏳ Attesa... ({elapsed}/{max_wait_time}s)", flush=True)
+        else:
+            print("⚠️ Timeout: il bot non ha risposto in tempo", flush=True)
+            return "Timeout: bot non attivo", 504
+
+        # ✅ Reset webhook
         future = asyncio.run_coroutine_threadsafe(
             bot_app.bot.set_webhook(url=WEBHOOK_URL),
             main_loop
         )
         future.result(timeout=10)
 
-        print("✅ Wake & Webhook reset completati", flush=True)
-        return "Wake & Reset COMPLETATO", 200
+        print("✅ Webhook reimpostato con successo!", flush=True)
+        return "Wake + Webhook RESET ✅", 200
 
     except Exception as e:
         print(f"❌ Errore in wake_and_reset: {e}", file=sys.stderr, flush=True)
