@@ -139,77 +139,52 @@ def webhook():
         print("❌ Errore nel webhook:", e, file=sys.stderr, flush=True)
         return "Errore interno", 500
 
-# --- 11. Ping semplice ---
+# --- 11. Ping ---
 @app.route("/ping")
 def ping():
     print("🔄 PING ricevuto", flush=True)
     return "✅ Bot attivo", 200
 
-# --- 12. Reset Webhook semplice ---
-@app.route("/reset_webhook")
-def reset_webhook():
-    print("🔁 Resetting webhook...", flush=True)
-    try:
-        future = asyncio.run_coroutine_threadsafe(
-            bot_app.bot.set_webhook(url=WEBHOOK_URL),
-            main_loop
-        )
-        result = future.result(timeout=10)
-        print("✅ Webhook reimpostato correttamente", flush=True)
-        return "Webhook reimpostato", 200
-    except Exception as e:
-        print("❌ Errore nel reset webhook:", e, file=sys.stderr, flush=True)
-        return "Errore nel reset webhook", 500
-
-# --- ✅ 13. Wake & Reset REATTIVO ---
+# --- 12. Wake & Reset (thread in background, compatibile con cron-job) ---
 @app.route("/wake_and_reset")
 def wake_and_reset():
-    print("👋 Wake & Reset INITIATED", flush=True)
-
-    try:
-        ping_url = f"https://{RENDER_HOST}/ping"
-        max_wait_time = 60   # secondi massimi di attesa
-        check_interval = 5   # ogni quanti secondi riprovare
-        elapsed = 0
-
-        print(f"📡 Pinging {ping_url} per risvegliare il bot...", flush=True)
+    def background_task():
         try:
-            requests.get(ping_url, timeout=5)
-        except Exception as e:
-            print(f"⚠️ Primo ping fallito (normale se bot è in sleep): {e}", flush=True)
+            ping_url = f"https://{RENDER_HOST}/ping"
+            max_wait_time = 120
+            check_interval = 5
+            elapsed = 0
 
-        # 🔁 Attendi fino a quando risponde o timeout
-        while elapsed < max_wait_time:
+            print(f"📡 Wake&Reset: pinging {ping_url}", flush=True)
             try:
-                response = requests.get(ping_url, timeout=5)
-                if response.status_code == 200:
-                    print("✅ Bot online, procedo con reset webhook", flush=True)
-                    break
-            except Exception:
-                pass
+                requests.get(ping_url, timeout=5)
+            except Exception as e:
+                print(f"⏳ Primo ping fallito: {e}", flush=True)
 
-            time.sleep(check_interval)
-            elapsed += check_interval
-            print(f"⏳ Attesa... ({elapsed}/{max_wait_time}s)", flush=True)
-        else:
-            print("⚠️ Timeout: il bot non ha risposto in tempo", flush=True)
-            return "Timeout: bot non attivo", 504
+            while elapsed < max_wait_time:
+                try:
+                    if requests.get(ping_url, timeout=5).status_code == 200:
+                        break
+                except:
+                    pass
+                time.sleep(check_interval)
+                elapsed += check_interval
+                print(f"⏳ Attesa... {elapsed}/{max_wait_time}s", flush=True)
 
-        # ✅ Reset webhook
-        future = asyncio.run_coroutine_threadsafe(
-            bot_app.bot.set_webhook(url=WEBHOOK_URL),
-            main_loop
-        )
-        future.result(timeout=10)
+            future = asyncio.run_coroutine_threadsafe(
+                bot_app.bot.set_webhook(url=WEBHOOK_URL),
+                main_loop
+            )
+            future.result(timeout=10)
+            print("✅ Webhook reimpostato in background", flush=True)
 
-        print("✅ Webhook reimpostato con successo!", flush=True)
-        return "Wake + Webhook RESET ✅", 200
+        except Exception as e:
+            print(f"❌ Errore in wake_and_reset thread: {e}", file=sys.stderr, flush=True)
 
-    except Exception as e:
-        print(f"❌ Errore in wake_and_reset: {e}", file=sys.stderr, flush=True)
-        return "Errore in wake_and_reset", 500
+    threading.Thread(target=background_task).start()
+    return "Wake & Reset in background avviato ✅", 200
 
-# --- 14. Avvio bot + Flask ---
+# --- 13. Avvio bot + Flask ---
 async def main():
     print(f"🚀 Imposto webhook: {WEBHOOK_URL}", flush=True)
     await bot_app.bot.set_webhook(url=WEBHOOK_URL)
