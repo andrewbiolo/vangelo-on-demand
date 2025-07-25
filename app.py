@@ -134,12 +134,17 @@ def ping():
     print("🔄 PING ricevuto", flush=True)
     return "✅ Bot attivo", 200
 
-# --- ✅ 12. Endpoint /reset_webhook per riattivare il bot manualmente ---
+# --- ✅ 12. Endpoint /reset_webhook (non chiude il loop!) ---
 @app.route("/reset_webhook")
 def reset_webhook():
+    print("🔁 Resetting webhook...", flush=True)
     try:
-        asyncio.run(bot_app.bot.set_webhook(url=WEBHOOK_URL))
-        print("✅ Webhook reimpostato manualmente", flush=True)
+        future = asyncio.run_coroutine_threadsafe(
+            bot_app.bot.set_webhook(url=WEBHOOK_URL),
+            main_loop
+        )
+        result = future.result(timeout=10)
+        print("✅ Webhook reimpostato correttamente", flush=True)
         return "Webhook reimpostato", 200
     except Exception as e:
         print("❌ Errore nel reset webhook:", e, file=sys.stderr, flush=True)
