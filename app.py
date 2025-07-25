@@ -61,7 +61,6 @@ async def vangelo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("📨 Recupero il Vangelo richiesto...")
         await invia_vangelo_oggi(chat_id, TOKEN, date_str)
 
-        # ✅ Mostra bottone alla fine anche dopo /vangelo
         await bot_app.bot.send_message(
             chat_id,
             "Puoi richiedere di nuovo il Vangelo qui sotto 👇",
@@ -98,7 +97,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("📨 Recupero il Vangelo richiesto...")
             await invia_vangelo_oggi(chat_id, TOKEN, None)
 
-            # ✅ Ripropone il bottone in fondo anche dopo click
             await bot_app.bot.send_message(
                 chat_id,
                 "Puoi richiedere di nuovo il Vangelo qui sotto 👇",
@@ -136,17 +134,26 @@ def ping():
     print("🔄 PING ricevuto", flush=True)
     return "✅ Bot attivo", 200
 
-# --- 12. Avvio del bot ---
+# --- ✅ 12. Endpoint /reset_webhook per riattivare il bot manualmente ---
+@app.route("/reset_webhook")
+def reset_webhook():
+    try:
+        asyncio.run(bot_app.bot.set_webhook(url=WEBHOOK_URL))
+        print("✅ Webhook reimpostato manualmente", flush=True)
+        return "Webhook reimpostato", 200
+    except Exception as e:
+        print("❌ Errore nel reset webhook:", e, file=sys.stderr, flush=True)
+        return "Errore nel reset webhook", 500
+
+# --- 13. Avvio del bot ---
 async def main():
     print(f"🚀 Imposto webhook: {WEBHOOK_URL}", flush=True)
     await bot_app.bot.set_webhook(url=WEBHOOK_URL)
 
-    # ✅ Comando registrato nel menù
     await bot_app.bot.set_my_commands([
         BotCommand("vangelo", "Vangelo del giorno")
     ])
 
-    # ✅ Recupero username del bot
     me = await bot_app.bot.get_me()
     print(f"🤖 Username del bot: @{me.username}", flush=True)
 
@@ -154,7 +161,7 @@ async def main():
     await bot_app.start()
     print("✅ Bot avviato e pronto!", flush=True)
 
-# --- 13. Thread e avvio Flask ---
+# --- 14. Thread e avvio Flask ---
 if __name__ == "__main__":
     def start_loop():
         asyncio.set_event_loop(main_loop)
