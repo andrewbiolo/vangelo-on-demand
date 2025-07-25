@@ -130,7 +130,13 @@ def webhook():
         print("❌ Errore nel webhook:", e, file=sys.stderr, flush=True)
         return "Errore interno", 500
 
-# --- 11. Avvio del bot ---
+# --- ✅ 11. Endpoint /ping per tenere viva l'app ---
+@app.route("/ping")
+def ping():
+    print("🔄 PING ricevuto", flush=True)
+    return "✅ Bot attivo", 200
+
+# --- 12. Avvio del bot ---
 async def main():
     print(f"🚀 Imposto webhook: {WEBHOOK_URL}", flush=True)
     await bot_app.bot.set_webhook(url=WEBHOOK_URL)
@@ -148,7 +154,7 @@ async def main():
     await bot_app.start()
     print("✅ Bot avviato e pronto!", flush=True)
 
-# --- 12. Thread e avvio Flask ---
+# --- 13. Thread e avvio Flask ---
 if __name__ == "__main__":
     def start_loop():
         asyncio.set_event_loop(main_loop)
