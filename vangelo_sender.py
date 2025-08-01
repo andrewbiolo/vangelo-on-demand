@@ -64,7 +64,8 @@ def estrai_vangelo(data: datetime.date):
 
 {corpo}"
 
-    data_str = data.strftime("%d %B %Y").replace(" 0", " ").replace("August", "agosto").replace("July", "luglio")  # o usa ITALIAN_MONTHS
+    mese_italiano = ITALIAN_MONTHS[data.month]
+    data_str = f"{data.day} {mese_italiano} {data.year}"
 
     return data_str, formatta_html(vangelo), formatta_html(commento), entry.link
 
