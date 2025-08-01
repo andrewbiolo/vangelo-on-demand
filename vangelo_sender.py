@@ -22,12 +22,14 @@ def formatta_html(text):
     text = re.sub(r'\n+', '\n\n', text.strip())
     return text
 
-
-from time import mktime
-
 def estrai_vangelo(data: datetime.date):
     feed = feedparser.parse("https://www.vaticannews.va/it/vangelo-del-giorno-e-parola-del-giorno.rss.xml")
-    entry = next((e for e in feed.entries if datetime.fromtimestamp(mktime(e.published_parsed)).date() == data), None)
+    giorno = data.day
+    mese = ITALIAN_MONTHS[data.month]
+    anno = data.year
+    data_str = f"{giorno} {mese} {anno}"
+
+    entry = next((e for e in feed.entries if data_str in e.title.lower()), None)
     if not entry:
         return None, None, None, None
 
@@ -36,31 +38,22 @@ def estrai_vangelo(data: datetime.date):
     vangelo, commento = "", ""
 
     for i, p in enumerate(ps):
-        text = p.get_text(separator="
-").strip()
+        text = p.get_text(separator="\n").strip()
         if text.startswith("Dal Vangelo"):
             vangelo = text
             if i + 1 < len(ps):
-                commento = ps[i + 1].get_text(separator="
-").strip()
+                commento = ps[i + 1].get_text(separator="\n").strip()
             break
 
-    righe = vangelo.split("
-")
+    righe = vangelo.split('\n')
     if len(righe) > 1:
         titolo = f"<i>{righe[0].strip()}</i>"
-        corpo = "
-".join(righe[1:]).strip()
-        vangelo = f"{titolo}
-
-{corpo}"
-
-    mese_italiano = ITALIAN_MONTHS[data.month]
-    data_str = f"{data.day} {mese_italiano} {data.year}"
+        corpo = '\n'.join(righe[1:]).strip()
+        vangelo = f"{titolo}\n\n{corpo}"
 
     return data_str, formatta_html(vangelo), formatta_html(commento), entry.link
 
-def invia_vangelo_oggi(chat_id: str, token: str, date_str: str = None):
+async def invia_vangelo_oggi(chat_id: str, token: str, date_str: str = None):
     if date_str:
         try:
             if "-" in date_str and len(date_str.split("-")[0]) == 2:
