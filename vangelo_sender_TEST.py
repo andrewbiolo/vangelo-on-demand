@@ -53,8 +53,7 @@ def estrai_vangelo(data: datetime.date):
 
     return data_str, formatta_html(vangelo), formatta_html(commento), entry.link
 
-def 
-formatta_html(text):
+def formatta_html(text):
     text = re.sub(r'“([^”]+)”', r'<b>“\1”</b>', text)
     text = re.sub(r'"([^"]+)"', r'<b>"\1"</b>', text)
     text = re.sub(r'«([^»]+)»', r'<i>«\1»</i>', text)
