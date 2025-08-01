@@ -20,4 +20,4 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Esegui invio Vangelo
-        run: python vangelo_sender_TEST.py
+        run: python vangelo_sender.py
