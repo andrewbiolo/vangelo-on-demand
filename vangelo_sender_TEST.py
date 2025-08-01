@@ -6,6 +6,7 @@ import feedparser
 from telegram import Bot
 from datetime import datetime
 from bs4 import BeautifulSoup
+from email.utils import parsedate_to_datetime
 
 ITALIAN_MONTHS = {
     1: "gennaio", 2: "febbraio", 3: "marzo", 4: "aprile",
@@ -24,7 +25,6 @@ def formatta_html(text):
 
 def carica_feed():
     try:
-        # Primo tentativo: feed online
         print("🌐 Caricamento feed online...")
         feed = feedparser.parse("https://www.vaticannews.va/it/vangelo-del-giorno-e-parola-del-giorno.rss.xml")
         if len(feed.entries) == 0:
@@ -37,20 +37,25 @@ def carica_feed():
 
 def estrai_vangelo(data: datetime.date):
     feed = carica_feed()
+    entry = None
+
+    for e in feed.entries:
+        try:
+            pub_date = parsedate_to_datetime(e.published).date()
+            if pub_date == data:
+                entry = e
+                break
+        except Exception as ex:
+            continue  # ignora entry non valide
+
+    if not entry:
+        return None, None, None, None
+
+    # per intestazione leggibile
     giorno = data.day
     mese = ITALIAN_MONTHS[data.month]
     anno = data.year
     data_str = f"{giorno} {mese} {anno}"
-
-    entry = None
-    for e in feed.entries:
-        titolo = e.title.lower().replace(" 0", " ").strip()
-        if f"{giorno} {mese} {anno}".lower() in titolo:
-            entry = e
-            break
-
-    if not entry:
-        return None, None, None, None
 
     soup = BeautifulSoup(entry.description, "html.parser")
     ps = soup.find_all("p", style="text-align: justify;")
