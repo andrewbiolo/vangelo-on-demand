@@ -1,0 +1,100 @@
+import os
+import re
+import sys
+import asyncio
+import feedparser
+from telegram import Bot
+from datetime import datetime
+from bs4 import BeautifulSoup
+
+ITALIAN_MONTHS = {
+    1: "gennaio", 2: "febbraio", 3: "marzo", 4: "aprile",
+    5: "maggio", 6: "giugno", 7: "luglio", 8: "agosto",
+    9: "settembre", 10: "ottobre", 11: "novembre", 12: "dicembre"
+}
+
+
+from time import mktime
+
+def estrai_vangelo(data: datetime.date):
+    feed = feedparser.parse("https://www.vaticannews.va/it/vangelo-del-giorno-e-parola-del-giorno.rss.xml")
+
+    # Cerca l'entry in base al campo <pubDate>
+    entry = next(
+        (e for e in feed.entries if datetime.fromtimestamp(mktime(e.published_parsed)).date() == data),
+        None
+    )
+
+    if not entry:
+        return None, None, None, None
+
+    soup = BeautifulSoup(entry.description, "html.parser")
+    ps = soup.find_all("p", style="text-align: justify;")
+    vangelo, commento = "", ""
+
+    for i, p in enumerate(ps):
+        text = p.get_text(separator="\n").strip()
+        if text.startswith("Dal Vangelo"):
+            vangelo = text
+            if i + 1 < len(ps):
+                commento = ps[i + 1].get_text(separator="\n").strip()
+            break
+
+    righe = vangelo.split('\n')
+    if len(righe) > 1:
+        titolo = f"<i>{righe[0].strip()}</i>"
+        corpo = '\n'.join(righe[1:]).strip()
+        vangelo = f"{titolo}\n\n{corpo}"
+
+    giorno = data.day
+    mese = ITALIAN_MONTHS[data.month]
+    anno = data.year
+    data_str = f"{giorno} {mese} {anno}"
+
+    return data_str, formatta_html(vangelo), formatta_html(commento), entry.link
+
+def 
+formatta_html(text):
+    text = re.sub(r'“([^”]+)”', r'<b>“\1”</b>', text)
+    text = re.sub(r'"([^"]+)"', r'<b>"\1"</b>', text)
+    text = re.sub(r'«([^»]+)»', r'<i>«\1»</i>', text)
+    text = re.sub(r'\(([^)]+)\)', r'<i>(\1)</i>', text)
+    text = text.replace("<br>", "").replace("<br/>", "").replace("<br />", "")
+    text = re.sub(r'\n+', '\n\n', text.strip())
+    return text
+
+def invia_vangelo_oggi(chat_id: str, token: str, date_str: str = None):
+    if date_str:
+        try:
+            if "-" in date_str and len(date_str.split("-")[0]) == 2:
+                data = datetime.strptime(date_str, "%d-%m-%Y").date()
+            else:
+                data = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            raise ValueError("Data non valida. Usa il formato DD-MM-YYYY o YYYY-MM-DD (es: 24-07-2024)")
+    else:
+        data = datetime.utcnow().date()
+
+    data_str, vangelo_text, commento_text, link = estrai_vangelo(data)
+    if not vangelo_text:
+        raise ValueError("Nessun Vangelo trovato per questa data.")
+
+    bot = Bot(token=token)
+    await bot.send_message(chat_id=chat_id, text=f"📖 <b>Vangelo del giorno ({data_str})</b>\n\n🕊️ {vangelo_text}", parse_mode='HTML')
+    await bot.send_message(chat_id=chat_id, text=f"📝 <b>Commento al Vangelo</b>\n\n{commento_text}", parse_mode='HTML')
+    await bot.send_message(chat_id=chat_id, text=f"🔗 <a href='{link}'>Leggi sul sito Vatican News</a>\n\n🌱 Buona giornata!", parse_mode='HTML', disable_web_page_preview=True)
+
+# --- Esecuzione diretta da terminale ---
+if __name__ == "__main__":
+    token = os.getenv("TOKEN")
+    chat_id = os.getenv("CHAT_ID")
+    date_arg = sys.argv[1] if len(sys.argv) > 1 else None
+
+    if not token or not chat_id:
+        print("❌ Errore: assicurati di avere le variabili d'ambiente TOKEN e CHAT_ID impostate.")
+        sys.exit(1)
+
+    try:
+        asyncio.run(invia_vangelo_oggi(chat_id, token, date_arg))
+    except Exception as e:
+        print(f"❌ Errore durante l'invio del Vangelo: {e}")
