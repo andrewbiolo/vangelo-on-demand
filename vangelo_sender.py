@@ -27,16 +27,7 @@ from time import mktime
 
 def estrai_vangelo(data: datetime.date):
     feed = feedparser.parse("https://www.vaticannews.va/it/vangelo-del-giorno-e-parola-del-giorno.rss.xml")
-
-    # Cerca l'entry con la data esatta nel campo published_parsed
-    entry = next(
-        (
-            e for e in feed.entries
-            if datetime.fromtimestamp(mktime(e.published_parsed)).date() == data
-        ),
-        None
-    )
-
+    entry = next((e for e in feed.entries if datetime.fromtimestamp(mktime(e.published_parsed)).date() == data), None)
     if not entry:
         return None, None, None, None
 
@@ -54,12 +45,12 @@ def estrai_vangelo(data: datetime.date):
 ").strip()
             break
 
-    righe = vangelo.split('
-')
+    righe = vangelo.split("
+")
     if len(righe) > 1:
         titolo = f"<i>{righe[0].strip()}</i>"
-        corpo = '
-'.join(righe[1:]).strip()
+        corpo = "
+".join(righe[1:]).strip()
         vangelo = f"{titolo}
 
 {corpo}"
