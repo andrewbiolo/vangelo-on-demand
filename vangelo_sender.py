@@ -29,7 +29,9 @@ def estrai_vangelo(data: datetime.date):
     anno = data.year
     data_str = f"{giorno} {mese} {anno}"
 
-    entry = next((e for e in feed.entries if data_str in e.title.lower()), None)
+    # Usa regex per trovare la data nel titolo
+    pattern = re.compile(rf"\b0*{giorno} {mese} {anno}\b", re.IGNORECASE)
+    entry = next((e for e in feed.entries if pattern.search(e.title)), None)
     if not entry:
         return None, None, None, None
 
