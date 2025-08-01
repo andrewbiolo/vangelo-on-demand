@@ -22,16 +22,33 @@ def formatta_html(text):
     text = re.sub(r'\n+', '\n\n', text.strip())
     return text
 
+def carica_feed():
+    try:
+        # Primo tentativo: feed online
+        print("🌐 Caricamento feed online...")
+        feed = feedparser.parse("https://www.vaticannews.va/it/vangelo-del-giorno-e-parola-del-giorno.rss.xml")
+        if len(feed.entries) == 0:
+            raise Exception("Feed online vuoto")
+        return feed
+    except Exception as e:
+        print(f"⚠️ Errore caricamento feed online: {e}")
+        print("📁 Caricamento feed locale da 'vangeldelgiorno.xml'...")
+        return feedparser.parse("vangeldelgiorno.xml")
+
 def estrai_vangelo(data: datetime.date):
-    feed = feedparser.parse("https://www.vaticannews.va/it/vangelo-del-giorno-e-parola-del-giorno.rss.xml")
+    feed = carica_feed()
     giorno = data.day
     mese = ITALIAN_MONTHS[data.month]
     anno = data.year
     data_str = f"{giorno} {mese} {anno}"
 
-    # FIX: rimosso \b perché non funziona con 0*1
-    pattern = re.compile(rf"0*{giorno} {mese} {anno}", re.IGNORECASE)
-    entry = next((e for e in feed.entries if pattern.search(e.title)), None)
+    entry = None
+    for e in feed.entries:
+        titolo = e.title.lower().replace(" 0", " ").strip()
+        if f"{giorno} {mese} {anno}".lower() in titolo:
+            entry = e
+            break
+
     if not entry:
         return None, None, None, None
 
@@ -63,13 +80,13 @@ async def invia_vangelo_oggi(chat_id: str, token: str, date_str: str = None):
             else:
                 data = datetime.strptime(date_str, "%Y-%m-%d").date()
         except ValueError:
-            raise ValueError("Data non valida. Usa il formato DD-MM-YYYY o YYYY-MM-DD (es: 24-07-2024)")
+            raise ValueError("Data non valida. Usa il formato DD-MM-YYYY o YYYY-MM-DD (es: 01-08-2025)")
     else:
         data = datetime.utcnow().date()
 
     data_str, vangelo_text, commento_text, link = estrai_vangelo(data)
     if not vangelo_text:
-        raise ValueError("Nessun Vangelo trovato per questa data.")
+        raise ValueError(f"Nessun Vangelo trovato per la data {data.strftime('%d-%m-%Y')}.")
 
     bot = Bot(token=token)
     await bot.send_message(chat_id=chat_id, text=f"📖 <b>Vangelo del giorno ({data_str})</b>\n\n🕊️ {vangelo_text}", parse_mode='HTML')
