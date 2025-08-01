@@ -39,57 +39,56 @@ bot_app = Application.builder().token(TOKEN).build()
 # --- 4. Bottoni inline ---
 def get_vangelo_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📖 Vangelo del giorno", callback_data="vangelo_oggi")]
+        [InlineKeyboardButton("📖 Vangelo e Commento", callback_data="vangelo_oggi")]
     ])
 
-# --- 5. Funzione per inviare bottone iniziale ---
-async def handle_vangelo_entry(chat_id):
-    await bot_app.bot.send_message(
-        chat_id,
-        "Benvenuto! Clicca il bottone per ricevere il Vangelo del giorno 👇",
-        reply_markup=get_vangelo_keyboard()
-    )
-
-# --- 6. Comando /vangelo [opzionale: data] ---
-async def vangelo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("📥 Comando /vangelo ricevuto", flush=True)
+# --- 5. Comandi del bot ---
+async def handle_vangelo_base(update: Update, context: ContextTypes.DEFAULT_TYPE, tipo: str = None):
+    comando = f"/{tipo or 'vangeloecommento'}"
+    print(f"📥 Comando ricevuto: {comando}", flush=True)
     chat_id = str(update.effective_chat.id)
 
     date_str = None
     if context.args:
         date_str = context.args[0]
-        print(f"📅 Parametro data richiesto: {date_str}", flush=True)
+        print(f"📅 Parametro data: {date_str}", flush=True)
 
     try:
         await update.message.reply_text("📨 Recupero il Vangelo richiesto...")
-        await invia_vangelo_oggi(chat_id, TOKEN, date_str)
+        await invia_vangelo_oggi(chat_id, TOKEN, date_str, tipo)
 
         await bot_app.bot.send_message(
             chat_id,
-            "Puoi richiedere di nuovo il Vangelo qui sotto 👇",
+            "📘 Puoi richiedere di nuovo il Vangelo qui sotto 👇",
             reply_markup=get_vangelo_keyboard()
         )
 
     except ValueError as ve:
         await update.message.reply_text(f"⚠️ Errore: {ve}")
     except Exception as e:
-        print(f"❌ Errore in /vangelo: {e}", file=sys.stderr, flush=True)
-        await update.message.reply_text("⚠️ Errore durante l'invio del Vangelo.")
+        print(f"❌ Errore in {comando}: {e}", file=sys.stderr, flush=True)
+        await update.message.reply_text("⚠️ Errore durante l'invio.")
 
-# --- 7. Comando /start (anche con link ?start=vangelo) ---
+async def vangelo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await handle_vangelo_base(update, context, tipo="vangelo")
+
+async def commento(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await handle_vangelo_base(update, context, tipo="commento")
+
+async def vangeloecommento(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await handle_vangelo_base(update, context, tipo=None)
+
+# --- 6. /start ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"▶️ Comando /start ricevuto. Argomenti: {context.args}", flush=True)
     chat_id = update.effective_chat.id
 
-    if context.args and context.args[0].startswith("vangelo"):
-        await handle_vangelo_entry(chat_id)
-    else:
-        await update.message.reply_text(
-            "Benvenuto! Clicca qui sotto per leggere il Vangelo:",
-            reply_markup=get_vangelo_keyboard()
-        )
+    await update.message.reply_text(
+        "Benvenuto! Clicca qui sotto per ricevere il Vangelo:",
+        reply_markup=get_vangelo_keyboard()
+    )
 
-# --- 8. Callback da bottone inline ---
+# --- 7. Callback inline ---
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     chat_id = str(query.message.chat.id)
@@ -97,11 +96,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await query.answer()
         await query.edit_message_text("📨 Recupero il Vangelo richiesto...")
-        await invia_vangelo_oggi(chat_id, TOKEN, None)
+        await invia_vangelo_oggi(chat_id, TOKEN, None, tipo=None)
 
         await bot_app.bot.send_message(
             chat_id,
-            "Puoi richiedere di nuovo il Vangelo qui sotto 👇",
+            "📘 Puoi richiedere di nuovo il Vangelo qui sotto 👇",
             reply_markup=get_vangelo_keyboard()
         )
 
@@ -112,33 +111,31 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "⚠️ Il bot si stava riattivando. Per favore clicca di nuovo tra pochi secondi 🙏"
         )
 
-# --- 9. Handlers ---
-bot_app.add_handler(CommandHandler("vangelo", vangelo))
+# --- 8. Handlers ---
 bot_app.add_handler(CommandHandler("start", start))
+bot_app.add_handler(CommandHandler("vangelo", vangelo))
+bot_app.add_handler(CommandHandler("commento", commento))
+bot_app.add_handler(CommandHandler("vangeloecommento", vangeloecommento))
 bot_app.add_handler(CallbackQueryHandler(handle_callback))
 
-# --- 10. Webhook endpoint ---
+# --- 9. Webhook endpoint ---
 @app.route(WEBHOOK_PATH, methods=["POST"])
 def webhook():
-    print("📍 ENTRATO IN /bot/ webhook", flush=True)
     try:
         payload = request.get_json(force=True)
-        print("📩 JSON ricevuto:\n" + json.dumps(payload, indent=2), flush=True)
-
         update = Update.de_json(payload, bot_app.bot)
         asyncio.run_coroutine_threadsafe(bot_app.process_update(update), main_loop)
-
         return "OK", 200
     except Exception as e:
         print("❌ Errore nel webhook:", e, file=sys.stderr, flush=True)
         return "Errore interno", 500
 
-# --- 11. Endpoint ping ---
+# --- 10. Endpoint ping ---
 @app.route("/ping")
 def ping():
     return "pong", 200
 
-# --- 12. Endpoint wake_and_reset ---
+# --- 11. Wake&Reset ---
 @app.route("/wake_and_reset")
 def wake_and_reset():
     def background_task():
@@ -147,8 +144,6 @@ def wake_and_reset():
             max_wait_time = 60
             check_interval = 5
             elapsed = 0
-
-            print(f"📡 Wake&Reset: pinging {ping_url}", flush=True)
 
             try:
                 requests.get(ping_url, timeout=5)
@@ -180,20 +175,21 @@ def wake_and_reset():
                 except Exception as e:
                     print(f"❌ Errore in wake_and_reset thread: {e}", file=sys.stderr, flush=True)
                     break
-
         except Exception as outer_e:
             print(f"❌ Errore esterno in wake_and_reset: {outer_e}", file=sys.stderr, flush=True)
 
     threading.Thread(target=background_task).start()
     return "Wake&Reset avviato in background ✅", 200
 
-# --- 13. Avvio del bot ---
+# --- 12. Avvio ---
 async def main():
     print(f"🚀 Imposto webhook: {WEBHOOK_URL}", flush=True)
     await bot_app.bot.set_webhook(url=WEBHOOK_URL)
 
     await bot_app.bot.set_my_commands([
-        BotCommand("vangelo", "Vangelo del giorno")
+        BotCommand("vangelo", "📖 Solo Vangelo del giorno"),
+        BotCommand("commento", "📝 Solo commento"),
+        BotCommand("vangeloecommento", "📚 Tutto: vangelo + commento")
     ])
 
     me = await bot_app.bot.get_me()
@@ -203,7 +199,7 @@ async def main():
     await bot_app.start()
     print("✅ Bot avviato e pronto!", flush=True)
 
-# --- 14. Thread Flask ---
+# --- 13. Thread Flask ---
 if __name__ == "__main__":
     def start_loop():
         asyncio.set_event_loop(main_loop)
