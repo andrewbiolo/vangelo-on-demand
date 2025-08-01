@@ -22,16 +22,21 @@ def formatta_html(text):
     text = re.sub(r'\n+', '\n\n', text.strip())
     return text
 
+
+from time import mktime
+
 def estrai_vangelo(data: datetime.date):
     feed = feedparser.parse("https://www.vaticannews.va/it/vangelo-del-giorno-e-parola-del-giorno.rss.xml")
-    giorno = data.day
-    mese = ITALIAN_MONTHS[data.month]
-    anno = data.year
-    data_str = f"{giorno} {mese} {anno}"
 
-    # Usa regex per trovare la data nel titolo
-    pattern = re.compile(rf"\b0*{giorno} {mese} {anno}\b", re.IGNORECASE)
-    entry = next((e for e in feed.entries if pattern.search(e.title)), None)
+    # Cerca l'entry con la data esatta nel campo published_parsed
+    entry = next(
+        (
+            e for e in feed.entries
+            if datetime.fromtimestamp(mktime(e.published_parsed)).date() == data
+        ),
+        None
+    )
+
     if not entry:
         return None, None, None, None
 
@@ -40,22 +45,30 @@ def estrai_vangelo(data: datetime.date):
     vangelo, commento = "", ""
 
     for i, p in enumerate(ps):
-        text = p.get_text(separator="\n").strip()
+        text = p.get_text(separator="
+").strip()
         if text.startswith("Dal Vangelo"):
             vangelo = text
             if i + 1 < len(ps):
-                commento = ps[i + 1].get_text(separator="\n").strip()
+                commento = ps[i + 1].get_text(separator="
+").strip()
             break
 
-    righe = vangelo.split('\n')
+    righe = vangelo.split('
+')
     if len(righe) > 1:
         titolo = f"<i>{righe[0].strip()}</i>"
-        corpo = '\n'.join(righe[1:]).strip()
-        vangelo = f"{titolo}\n\n{corpo}"
+        corpo = '
+'.join(righe[1:]).strip()
+        vangelo = f"{titolo}
+
+{corpo}"
+
+    data_str = data.strftime("%d %B %Y").replace(" 0", " ").replace("August", "agosto").replace("July", "luglio")  # o usa ITALIAN_MONTHS
 
     return data_str, formatta_html(vangelo), formatta_html(commento), entry.link
 
-async def invia_vangelo_oggi(chat_id: str, token: str, date_str: str = None):
+def invia_vangelo_oggi(chat_id: str, token: str, date_str: str = None):
     if date_str:
         try:
             if "-" in date_str and len(date_str.split("-")[0]) == 2:
